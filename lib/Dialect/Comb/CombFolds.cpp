@@ -258,6 +258,17 @@ static bool narrowOperationWidth(OpTy op, bool narrowTrailingBits,
   return true;
 }
 
+static bool isZeroWidthInteger(Type candidate) {
+  auto intType = dyn_cast<IntegerType>(candidate);
+  auto hwIntType = dyn_cast<hw::IntType>(candidate);
+  return (intType && intType.getWidth() == 0) ||
+         (hwIntType && hwIntType.getWidth() == 0);
+}
+
+static OpFoldResult foldToZeroWidthValue(MLIRContext *ctx) {
+  return getIntAttr(APInt(0u, 0), ctx);
+}
+
 //===----------------------------------------------------------------------===//
 // Unary Operations
 //===----------------------------------------------------------------------===//
@@ -265,6 +276,9 @@ static bool narrowOperationWidth(OpTy op, bool narrowTrailingBits,
 OpFoldResult ReplicateOp::fold(FoldAdaptor adaptor) {
   if (isOpTriviallyRecursive(*this))
     return {};
+
+  if (isZeroWidthInteger(getResult().getType()))
+    return foldToZeroWidthValue(getContext());
 
   // Replicate one time -> noop.
   if (cast<IntegerType>(getType()).getWidth() ==
@@ -296,6 +310,9 @@ OpFoldResult ParityOp::fold(FoldAdaptor adaptor) {
   if (isOpTriviallyRecursive(*this))
     return {};
 
+  if (isZeroWidthInteger(getResult().getType()))
+    return getIntAttr(APInt(1u, 1), getContext());
+
   // Constant fold.
   if (auto input = dyn_cast_or_null<IntegerAttr>(adaptor.getInput()))
     return getIntAttr(APInt(1, input.getValue().popcount() & 1), getContext());
@@ -324,6 +341,9 @@ static Attribute constFoldBinaryOp(ArrayRef<Attribute> operands,
 OpFoldResult ShlOp::fold(FoldAdaptor adaptor) {
   if (isOpTriviallyRecursive(*this))
     return {};
+
+  if (isZeroWidthInteger(getResult().getType()))
+    return foldToZeroWidthValue(getContext());
 
   if (auto rhs = dyn_cast_or_null<IntegerAttr>(adaptor.getRhs())) {
     if (rhs.getValue().isZero())
@@ -369,6 +389,9 @@ OpFoldResult ShrUOp::fold(FoldAdaptor adaptor) {
   if (isOpTriviallyRecursive(*this))
     return {};
 
+  if (isZeroWidthInteger(getResult().getType()))
+    return foldToZeroWidthValue(getContext());
+
   if (auto rhs = dyn_cast_or_null<IntegerAttr>(adaptor.getRhs())) {
     if (rhs.getValue().isZero())
       return getOperand(0);
@@ -413,6 +436,9 @@ OpFoldResult ShrSOp::fold(FoldAdaptor adaptor) {
   if (isOpTriviallyRecursive(*this))
     return {};
 
+  if (isZeroWidthInteger(getResult().getType()))
+    return foldToZeroWidthValue(getContext());
+
   if (auto rhs = dyn_cast_or_null<IntegerAttr>(adaptor.getRhs()))
     if (rhs.getValue().isZero())
       return getOperand(0);
@@ -456,6 +482,9 @@ LogicalResult ShrSOp::canonicalize(ShrSOp op, PatternRewriter &rewriter) {
 OpFoldResult ExtractOp::fold(FoldAdaptor adaptor) {
   if (isOpTriviallyRecursive(*this))
     return {};
+
+  if (isZeroWidthInteger(getResult().getType()))
+    return foldToZeroWidthValue(getContext());
 
   // If we are extracting the entire input, then return it.
   if (getInput().getType() == getType())
@@ -825,6 +854,9 @@ OpFoldResult AndOp::fold(FoldAdaptor adaptor) {
   if (isOpTriviallyRecursive(*this))
     return {};
 
+  if (isZeroWidthInteger(getResult().getType()))
+    return foldToZeroWidthValue(getContext());
+
   APInt value = APInt::getAllOnes(cast<IntegerType>(getType()).getWidth());
 
   auto inputs = adaptor.getInputs();
@@ -1114,6 +1146,9 @@ OpFoldResult OrOp::fold(FoldAdaptor adaptor) {
   if (isOpTriviallyRecursive(*this))
     return {};
 
+  if (isZeroWidthInteger(getResult().getType()))
+    return foldToZeroWidthValue(getContext());
+
   auto value = APInt::getZero(cast<IntegerType>(getType()).getWidth());
   auto inputs = adaptor.getInputs();
   // or(x, 10, 01) -> 11
@@ -1258,6 +1293,9 @@ LogicalResult OrOp::canonicalize(OrOp op, PatternRewriter &rewriter) {
 OpFoldResult XorOp::fold(FoldAdaptor adaptor) {
   if (isOpTriviallyRecursive(*this))
     return {};
+
+  if (isZeroWidthInteger(getResult().getType()))
+    return foldToZeroWidthValue(getContext());
 
   auto size = getInputs().size();
   auto inputs = adaptor.getInputs();
@@ -1405,6 +1443,9 @@ OpFoldResult SubOp::fold(FoldAdaptor adaptor) {
   if (isOpTriviallyRecursive(*this))
     return {};
 
+  if (isZeroWidthInteger(getResult().getType()))
+    return foldToZeroWidthValue(getContext());
+
   // sub(x - x) -> 0
   if (getRhs() == getLhs())
     return getIntAttr(
@@ -1459,6 +1500,9 @@ OpFoldResult AddOp::fold(FoldAdaptor adaptor) {
     return {};
 
   auto size = getInputs().size();
+
+  if (isZeroWidthInteger(getResult().getType()))
+    return foldToZeroWidthValue(getContext());
 
   // add(x) -> x -- noop
   if (size == 1u)
@@ -1574,6 +1618,9 @@ LogicalResult AddOp::canonicalize(AddOp op, PatternRewriter &rewriter) {
 OpFoldResult MulOp::fold(FoldAdaptor adaptor) {
   if (isOpTriviallyRecursive(*this))
     return {};
+
+  if (isZeroWidthInteger(getResult().getType()))
+    return foldToZeroWidthValue(getContext());
 
   auto size = getInputs().size();
   auto inputs = adaptor.getInputs();
@@ -1738,6 +1785,9 @@ OpFoldResult ConcatOp::fold(FoldAdaptor adaptor) {
   if (isOpTriviallyRecursive(*this))
     return {};
 
+  if (isZeroWidthInteger(getResult().getType()))
+    return foldToZeroWidthValue(getContext());
+
   if (getNumOperands() == 1)
     return getOperand(0);
 
@@ -1791,6 +1841,14 @@ LogicalResult ConcatOp::canonicalize(ConcatOp op, PatternRewriter &rewriter) {
     // Check to see if all operands are the same.
     if (inputs[i] != commonOperand)
       commonOperand = Value();
+
+    // If an operand to the concat is an i0, then it can be removed from the
+    // concatenation.
+    if (isZeroWidthInteger(inputs[i].getType())) {
+      rewriter.modifyOpInPlace(op,
+                               [&]() { op.getOperation()->eraseOperand(i); });
+      return success();
+    }
 
     // If an operand to the concat is itself a concat, then we can fold them
     // together.
@@ -1930,6 +1988,9 @@ LogicalResult ConcatOp::canonicalize(ConcatOp op, PatternRewriter &rewriter) {
 OpFoldResult MuxOp::fold(FoldAdaptor adaptor) {
   if (isOpTriviallyRecursive(*this))
     return {};
+
+  if (isZeroWidthInteger(getResult().getType()))
+    return foldToZeroWidthValue(getContext());
 
   // mux (c, b, b) -> b
   if (getTrueValue() == getFalseValue() && getTrueValue() != getResult())
@@ -2833,7 +2894,9 @@ static bool applyCmpPredicateToEqualOperands(ICmpPredicate predicate) {
 OpFoldResult ICmpOp::fold(FoldAdaptor adaptor) {
   // gt a, a -> false
   // gte a, a -> true
-  if (getLhs() == getRhs()) {
+  // Additionally, comparing zero width integers is like comparing the same
+  // value as they can only be zero.
+  if (getLhs() == getRhs() || isZeroWidthInteger(getLhs().getType())) {
     auto val = applyCmpPredicateToEqualOperands(getPredicate());
     return IntegerAttr::get(getType(), val);
   }
