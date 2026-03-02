@@ -311,7 +311,7 @@ OpFoldResult ParityOp::fold(FoldAdaptor adaptor) {
     return {};
 
   if (isZeroWidthInteger(getResult().getType()))
-    return getIntAttr(APInt(1u, 1), getContext());
+    return getIntAttr(APInt(1u, 0), getContext());
 
   // Constant fold.
   if (auto input = dyn_cast_or_null<IntegerAttr>(adaptor.getInput()))
